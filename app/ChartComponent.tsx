@@ -23,9 +23,8 @@ export default function ChartComponent({ data }) {
 
     // State and Ref for Drawing Mode
     const [isDrawing, setIsDrawing] = useState(false);
-    const isDrawingRef = useRef(false); // We need a ref so the event listener always sees the latest value
+    const isDrawingRef = useRef(false);
 
-    // Toggle Draw Mode
     const toggleDrawMode = () => {
         isDrawingRef.current = !isDrawingRef.current;
         setIsDrawing(isDrawingRef.current);
@@ -34,10 +33,10 @@ export default function ChartComponent({ data }) {
     useEffect(() => {
         if (!chartContainerRef.current || !data || data.length === 0) return;
 
-        // 1. Create the Main Chart
+        // 1. Create the Main Chart with Dynamic Dimensions
         const chart = createChart(chartContainerRef.current, {
             width: chartContainerRef.current.clientWidth,
-            height: 400,
+            height: chartContainerRef.current.clientHeight, // <-- Changed to dynamic height
             layout: { background: { color: '#ffffff' }, textColor: '#333' },
             grid: { vertLines: { color: '#f0f3fa' }, horzLines: { color: '#f0f3fa' } },
             timeScale: {
@@ -77,45 +76,39 @@ export default function ChartComponent({ data }) {
 
         // --- CLICK HANDLER FOR DRAWING S/R LINES ---
         const handleChartClick = (param) => {
-            // Only proceed if user clicked on the chart AND drawing mode is active
             if (!param.point || !isDrawingRef.current) return;
-
-            // Convert the mouse Y pixel coordinate into an actual stock price
             const price = candlestickSeries.coordinateToPrice(param.point.y);
 
             if (price !== null) {
-                // Draw the horizontal line
                 candlestickSeries.createPriceLine({
                     price: price,
-                    color: '#131722', // Dark slate for contrast
+                    color: '#131722',
                     lineWidth: 2,
-                    lineStyle: 2, // 2 = Dashed line
+                    lineStyle: 2,
                     axisLabelVisible: true,
                     title: 'S/R',
                 });
-
-                // Automatically turn off drawing mode after they place one line
                 isDrawingRef.current = false;
                 setIsDrawing(false);
             }
         };
 
-        // Attach the click listener
         chart.subscribeClick(handleChartClick);
-
         chart.timeScale().fitContent();
         chartRef.current = chart;
 
-        const handleResize = () => {
-            if (chartContainerRef.current) {
-                chart.applyOptions({ width: chartContainerRef.current.clientWidth });
-            }
-        };
-        window.addEventListener('resize', handleResize);
+        // --- RESIZE OBSERVER (Crucial for flexbox layouts) ---
+        const resizeObserver = new ResizeObserver((entries) => {
+            if (entries.length === 0 || entries[0].target !== chartContainerRef.current) { return; }
+            const newRect = entries[0].contentRect;
+            chart.applyOptions({ height: newRect.height, width: newRect.width });
+        });
+
+        resizeObserver.observe(chartContainerRef.current);
 
         return () => {
             chart.unsubscribeClick(handleChartClick);
-            window.removeEventListener('resize', handleResize);
+            resizeObserver.disconnect(); // Cleanup the observer
             chart.remove();
         };
     }, [data]);
@@ -126,7 +119,7 @@ export default function ChartComponent({ data }) {
         const timeScale = chartRef.current.timeScale();
         const currentRange = timeScale.getVisibleLogicalRange();
         if (currentRange) {
-            const zoomAmount = (currentRange.to - currentRange.from) * 0.1; // Zoom by 10%
+            const zoomAmount = (currentRange.to - currentRange.from) * 0.1;
             timeScale.setVisibleLogicalRange({
                 from: currentRange.from + zoomAmount,
                 to: currentRange.to - zoomAmount,
@@ -148,7 +141,8 @@ export default function ChartComponent({ data }) {
     };
 
     return (
-        <div style={{ width: '100%', position: 'relative' }}>
+        // Changed wrapper and container to take 100% height
+        <div className="w-full h-full relative">
 
             {/* FLOATING CHART TOOLBAR */}
             <div className="absolute top-4 left-4 z-10 flex gap-2">
@@ -180,8 +174,8 @@ export default function ChartComponent({ data }) {
                 </button>
             </div>
 
-            {/* CHART CONTAINER */}
-            <div ref={chartContainerRef} style={{ width: '100%', height: '400px' }} />
+            {/* CHART CONTAINER - Now perfectly fills the wrapper */}
+            <div ref={chartContainerRef} className="w-full h-full absolute inset-0" />
         </div>
     );
 }

@@ -41,7 +41,6 @@ export default function Dashboard() {
     }
   };
 
-  // --- ROW CLICK HANDLER (REAL API) ---
   const handleRowClick = async (stock: any) => {
     setSelectedStock(stock);
     setChartData(null);
@@ -113,7 +112,6 @@ export default function Dashboard() {
   };
 
   return (
-    // FIX 1: h-screen strictly locks the height to exactly 1 viewport. 
     <div className="h-screen bg-[#f8f9fa] flex flex-col font-sans relative overflow-hidden">
 
       {/* HEADER */}
@@ -129,12 +127,12 @@ export default function Dashboard() {
       </header>
 
       {/* TABS */}
-      <div className="bg-white border-b border-gray-200 px-6 py-2 flex space-x-2 z-10 shrink-0">
+      <div className="bg-white border-b border-gray-200 px-6 py-2 flex space-x-2 z-10 shrink-0 overflow-x-auto">
         {["Swing Momentum", "Portfolio Analysis"].map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
-            className={`px-4 py-1.5 rounded text-sm font-semibold flex items-center space-x-2 transition-all ${activeTab === tab
+            className={`px-4 py-1.5 rounded text-sm font-semibold flex items-center space-x-2 whitespace-nowrap transition-all ${activeTab === tab
               ? "bg-slate-800 text-white shadow"
               : "text-slate-500 hover:bg-slate-100 hover:text-slate-900"
               }`}
@@ -145,14 +143,17 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* FIX 2: flex-1 min-h-0 perfectly fills the remaining space WITHOUT stretching */}
-      <main className="flex-1 min-h-0 p-4 grid grid-cols-1 lg:grid-cols-12 gap-4 overflow-hidden">
+      {/* FIX 1: Responsive Main Container 
+        Mobile: flex-col, allows scrolling (overflow-y-auto).
+        Desktop: lg:grid, locks height (lg:overflow-hidden) to prevent dual-scrollbars. 
+      */}
+      <main className="flex-1 min-h-0 p-4 flex flex-col lg:grid lg:grid-cols-12 gap-4 overflow-y-auto lg:overflow-hidden">
 
-        {/* LEFT COLUMN */}
-        <div className="lg:col-span-5 flex flex-col gap-4 h-full min-h-0">
+        {/* LEFT COLUMN - TABLE */}
+        <div className="lg:col-span-5 flex flex-col gap-4 shrink-0 lg:shrink min-h-[500px] lg:min-h-0 lg:h-full">
 
           <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex items-end justify-between shrink-0">
-            <div className="flex flex-col gap-1.5 w-2/3">
+            <div className="flex flex-col gap-1.5 w-[60%] sm:w-2/3">
               <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Scan Date</label>
               <div className="relative">
                 <Calendar className="absolute left-3 top-2 text-slate-400" size={16} />
@@ -166,7 +167,7 @@ export default function Dashboard() {
             </div>
             <button
               onClick={fetchStockData}
-              className="bg-[#D4AF37] hover:bg-[#c4a130] text-white px-5 py-1.5 rounded font-bold text-sm flex items-center gap-2 transition-colors shadow-sm"
+              className="bg-[#D4AF37] hover:bg-[#c4a130] text-white px-4 sm:px-5 py-1.5 rounded font-bold text-sm flex items-center gap-2 transition-colors shadow-sm whitespace-nowrap"
             >
               {loading ? "Loading..." : "Run Scan"}
             </button>
@@ -174,7 +175,6 @@ export default function Dashboard() {
 
           {/* TABLE CONTAINER */}
           <div className="bg-white rounded-xl shadow-sm border border-slate-200 flex-1 flex flex-col min-h-0 overflow-hidden">
-
             <div className="p-3 border-b border-slate-200 bg-slate-50 flex justify-between items-center shrink-0">
               <h2 className="font-bold text-slate-700 text-sm">Market Scans</h2>
               <span className="text-xs font-bold bg-slate-200 text-slate-700 px-2.5 py-0.5 rounded-full">
@@ -182,8 +182,8 @@ export default function Dashboard() {
               </span>
             </div>
 
-            <div className="flex-1 overflow-y-auto bg-white min-h-0">
-              <table className="w-full text-left border-collapse">
+            <div className="flex-1 overflow-auto bg-white min-h-0">
+              <table className="w-full text-left border-collapse min-w-[400px]">
                 <thead className="bg-white text-slate-500 uppercase text-[10px] tracking-wider sticky top-0 z-10 shadow-sm">
                   <tr>
                     <th className="px-4 py-3 font-bold cursor-pointer hover:bg-slate-50 border-b border-slate-200" onClick={() => handleSort('name')}>
@@ -202,7 +202,7 @@ export default function Dashboard() {
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-[13px]">
                   {currentItems.length === 0 && (
-                    <tr><td colSpan="4" className="text-center py-12 text-slate-400 font-medium">No scans available</td></tr>
+                    <tr><td colSpan={4} className="text-center py-12 text-slate-400 font-medium">No scans available</td></tr>
                   )}
                   {currentItems.map((stock, idx) => (
                     <tr
@@ -233,7 +233,7 @@ export default function Dashboard() {
             </div>
 
             <div className="p-3 border-t border-slate-200 bg-slate-50 flex items-center justify-between text-[13px] shrink-0">
-              <div className="flex items-center gap-2 text-slate-600 font-medium">
+              <div className="flex items-center gap-2 text-slate-600 font-medium hidden sm:flex">
                 <span>Show</span>
                 <select
                   value={itemsPerPage}
@@ -244,9 +244,8 @@ export default function Dashboard() {
                   <option value={30}>30</option>
                   <option value={50}>50</option>
                 </select>
-                <span>rows</span>
               </div>
-              <div className="flex items-center gap-3">
+              <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
                 <span className="text-slate-500 font-medium">
                   Page <span className="font-bold text-slate-700">{currentPage}</span> of {totalPages || 1}
                 </span>
@@ -268,45 +267,88 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
-
           </div>
         </div>
 
-        {/* RIGHT COLUMN */}
-        <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col h-full min-h-0 overflow-hidden">
+        {/* RIGHT COLUMN - CHART & METRICS */}
+        {/* FIX 2: min-h-[500px] guarantees it doesn't get crushed on small screens */}
+        <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col shrink-0 lg:shrink min-h-[500px] lg:min-h-0 lg:h-full overflow-hidden">
+
           <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 z-10 shrink-0">
             <div className="flex items-center gap-2">
               <BarChart2 size={16} className="text-[#D4AF37]" />
-              <h2 className="font-bold text-slate-700 text-sm">
+              <h2 className="font-bold text-slate-700 text-sm truncate">
                 {selectedStock ? `${selectedStock.name} - 1Y History` : "Interactive Chart"}
               </h2>
             </div>
             {selectedStock && (
-              <span className="text-xs font-mono font-bold bg-slate-800 text-white px-2.5 py-1 rounded">
+              <span className="text-xs font-mono font-bold bg-slate-800 text-white px-2.5 py-1 rounded shrink-0">
                 ₹{selectedStock.Breakout_price}
               </span>
             )}
           </div>
 
-          <div className="flex-1 bg-white flex items-center justify-center relative w-full min-h-0 p-4">
+          {/* FIX 3: Simplified padding & min-h ensures no huge gaps and no crushed charts */}
+          <div className="flex-1 bg-white relative w-full min-h-[300px]">
             {selectedStock && chartData && !isChartLoading ? (
-              <div className="absolute inset-0 pt-4 px-2 pb-2">
+              <div className="absolute inset-0 p-4">
                 <ChartComponent data={chartData} />
               </div>
             ) : (
-              <div className="text-center">
-                <BarChart2 size={48} className={`mx-auto mb-4 ${isChartLoading ? 'text-[#D4AF37] animate-pulse' : 'text-slate-300'}`} />
-                <p className="text-slate-500 font-medium">
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <BarChart2 size={48} className={`mb-4 ${isChartLoading ? 'text-[#D4AF37] animate-pulse' : 'text-slate-300'}`} />
+                <p className="text-slate-500 font-medium px-4 text-center text-sm">
                   {isChartLoading ? "Loading real Upstox data..." : "Select a stock from the table to view its chart"}
                 </p>
               </div>
             )}
           </div>
+
+          {/* FIX 4: Responsive Metrics Grid (grid-cols-2 on tiny screens, grid-cols-3 on larger) */}
+          {selectedStock && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 border-t border-slate-200 bg-slate-50 shrink-0">
+
+              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">
+                  Market Cap (Cr)
+                </span>
+                <span className="text-sm font-bold text-slate-800 truncate">
+                  {selectedStock['Market Capitalization']
+                    ? `₹${Number(selectedStock['Market Capitalization']).toLocaleString('en-IN')}`
+                    : 'N/A'}
+                </span>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">
+                  P/E (TTM)
+                </span>
+                <span className="text-sm font-bold text-slate-800">
+                  {selectedStock['PE TTM Price to Earnings']
+                    ? Number(selectedStock['PE TTM Price to Earnings']).toFixed(2)
+                    : 'N/A'}
+                </span>
+              </div>
+
+              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center col-span-2 sm:col-span-1">
+                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">
+                  ROE (Annual)
+                </span>
+                <span className={`text-sm font-bold ${selectedStock['ROE Annual %'] > 15 ? 'text-emerald-600' : 'text-slate-800'}`}>
+                  {selectedStock['ROE Annual %']
+                    ? `${Number(selectedStock['ROE Annual %']).toFixed(2)}%`
+                    : 'N/A'}
+                </span>
+              </div>
+
+            </div>
+          )}
+
         </div>
       </main>
 
       {/* FLOATING AI CHAT WIDGET */}
-      <div className={`fixed bottom-24 right-6 w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col h-[500px] z-50 transition-all duration-300 transform origin-bottom-right ${isChatOpen ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"
+      <div className={`fixed bottom-24 right-4 sm:right-6 w-[90vw] sm:w-96 bg-white rounded-2xl shadow-2xl border border-slate-200 flex flex-col h-[500px] z-50 transition-all duration-300 transform origin-bottom-right ${isChatOpen ? "scale-100 opacity-100" : "scale-0 opacity-0 pointer-events-none"
         }`}>
         <div className="bg-slate-900 rounded-t-2xl p-4 flex items-center justify-between text-white shadow-md z-10">
           <div className="flex items-center gap-2">
@@ -356,7 +398,7 @@ export default function Dashboard() {
 
       <button
         onClick={() => setIsChatOpen(!isChatOpen)}
-        className="fixed bottom-6 right-6 bg-slate-900 hover:bg-slate-800 text-white p-4 rounded-full shadow-2xl z-50 transition-transform hover:scale-105 active:scale-95 flex items-center justify-center group"
+        className="fixed bottom-6 right-4 sm:right-6 bg-slate-900 hover:bg-slate-800 text-white p-4 rounded-full shadow-2xl z-50 transition-transform hover:scale-105 active:scale-95 flex items-center justify-center group"
       >
         {isChatOpen ? (
           <X size={24} className="group-hover:rotate-90 transition-transform duration-300" />
