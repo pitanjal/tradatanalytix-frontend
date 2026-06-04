@@ -5,7 +5,6 @@ import React, { useState, useMemo } from "react";
 import { LineChart, Home, Bot, Calendar, ArrowRight, ArrowUpDown, MessageSquare, X, BarChart2, ChevronLeft, ChevronRight } from "lucide-react";
 import ChartComponent from './ChartComponent';
 
-import { Analytics } from "@vercel/analytics/next"
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState("Swing Momentum");
