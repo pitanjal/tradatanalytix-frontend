@@ -1,8 +1,8 @@
 // @ts-nocheck
 "use client";
 
-import React, { useState, useMemo } from "react";
-import { LineChart, Home, Bot, Calendar, ArrowRight, ArrowUpDown, MessageSquare, X, BarChart2, ChevronLeft, ChevronRight } from "lucide-react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
+import { LineChart, Home, Bot, Calendar, ArrowRight, ArrowUpDown, MessageSquare, X, BarChart2, ChevronLeft, ChevronRight, Coins, Gauge, TrendingUp, Scale, Percent, Zap, Building2, GripHorizontal } from "lucide-react";
 import ChartComponent from './ChartComponent';
 
 
@@ -27,10 +27,93 @@ export default function Dashboard() {
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
 
+  // Adjustable Fundamentals Height State (Draggable Splitter)
+  const [fundamentalsHeight, setFundamentalsHeight] = useState(126);
+  const [isDragging, setIsDragging] = useState(false);
+  const dragStartYRef = useRef(0);
+  const startHeightRef = useRef(126);
+
+  const handleDragStart = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDragging(true);
+    dragStartYRef.current = e.clientY;
+    startHeightRef.current = fundamentalsHeight;
+  };
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
+    dragStartYRef.current = e.touches[0].clientY;
+    startHeightRef.current = fundamentalsHeight;
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMouseMove = (e: MouseEvent) => {
+      const deltaY = e.clientY - dragStartYRef.current;
+      // Dragging UP (deltaY < 0) increases fundamentals, dragging DOWN (deltaY > 0) decreases it
+      const newHeight = Math.min(Math.max(startHeightRef.current - deltaY, 40), 380);
+      setFundamentalsHeight(newHeight);
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      const deltaY = e.touches[0].clientY - dragStartYRef.current;
+      const newHeight = Math.min(Math.max(startHeightRef.current - deltaY, 40), 380);
+      setFundamentalsHeight(newHeight);
+    };
+
+    const handleDragEnd = () => {
+      setIsDragging(false);
+    };
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleDragEnd);
+    window.addEventListener("touchmove", handleTouchMove);
+    window.addEventListener("touchend", handleDragEnd);
+
+    return () => {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleDragEnd);
+      window.removeEventListener("touchmove", handleTouchMove);
+      window.removeEventListener("touchend", handleDragEnd);
+    };
+  }, [isDragging]);
+
+  const fetchApi = async (endpoint: string) => {
+    try {
+      const localRes = await fetch(`http://localhost:8000${endpoint}`, { signal: AbortSignal.timeout(2000) });
+      if (localRes.ok) return localRes;
+    } catch (e) {
+      // Local server unavailable or timed out, fallback to Render
+    }
+    return fetch(`https://tradatanalytix-backend.onrender.com${endpoint}`);
+  };
+
+  const formatValue = (val: any, type: 'currency' | 'pe' | 'percent' | 'ratio' | 'turnover') => {
+    if (val === null || val === undefined || val === '' || val === -99) return 'N/A';
+    const num = Number(val);
+    if (isNaN(num)) return 'N/A';
+
+    switch (type) {
+      case 'currency':
+        return `₹${num.toLocaleString('en-IN', { maximumFractionDigits: 2 })}`;
+      case 'pe':
+        return num.toFixed(2);
+      case 'percent':
+        return `${num > 0 ? '+' : ''}${num.toFixed(2)}%`;
+      case 'ratio':
+        return `${num.toFixed(2)}x`;
+      case 'turnover':
+        return `${num.toFixed(2)}x`;
+      default:
+        return num.toString();
+    }
+  };
+
   const fetchStockData = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`https://tradatanalytix-backend.onrender.com/api/swing-momentum?date=${selectedDate}`);
+      const res = await fetchApi(`/api/swing-momentum?date=${selectedDate}`);
       const result = await res.json();
       setStockData(result.data || []);
       setCurrentPage(1);
@@ -42,6 +125,41 @@ export default function Dashboard() {
     }
   };
 
+  // Automatically fetch the latest available data on load
+  useEffect(() => {
+    const fetchLatestData = async () => {
+      setLoading(true);
+      let attempts = 0;
+      let dateToTry = new Date();
+
+      while (attempts < 7) {
+        const dateStr = dateToTry.toISOString().split("T")[0];
+        try {
+          const res = await fetchApi(`/api/swing-momentum?date=${dateStr}`);
+          const result = await res.json();
+          if (result.data && result.data.length > 0) {
+            setStockData(result.data);
+            setSelectedDate(dateStr); // Update the date picker to the date that actually has data
+            setCurrentPage(1);
+            setLoading(false);
+            return;
+          }
+        } catch (error) {
+          console.error(`Failed to fetch data for ${dateStr}`, error);
+        }
+
+        // Go back one day and try again
+        dateToTry.setDate(dateToTry.getDate() - 1);
+        attempts++;
+      }
+
+      // If no data found in the last 7 days, just stop loading
+      setLoading(false);
+    };
+
+    fetchLatestData();
+  }, []);
+
   const handleRowClick = async (stock: any) => {
     setSelectedStock(stock);
     setChartData(null);
@@ -49,7 +167,7 @@ export default function Dashboard() {
 
     try {
       const instrument = stock.name;
-      const res = await fetch(`https://tradatanalytix-backend.onrender.com/api/stock-history/${encodeURIComponent(instrument)}`);
+      const res = await fetchApi(`/api/stock-history/${encodeURIComponent(instrument)}`);
 
       if (!res.ok) throw new Error("Failed to fetch historical data");
 
@@ -113,7 +231,7 @@ export default function Dashboard() {
   };
 
   return (
-    <div className="h-screen bg-[#f8f9fa] flex flex-col font-sans relative overflow-hidden">
+    <div className={`h-screen bg-[#f8f9fa] flex flex-col font-sans relative overflow-hidden ${isDragging ? 'select-none cursor-row-resize' : ''}`}>
 
       {/* HEADER */}
       <header className="bg-white border-b border-gray-200 px-6 py-3 flex items-center justify-between z-10 shadow-sm shrink-0">
@@ -272,8 +390,8 @@ export default function Dashboard() {
         </div>
 
         {/* RIGHT COLUMN - CHART & METRICS */}
-        {/* FIX 2: min-h-[500px] guarantees it doesn't get crushed on small screens */}
-        <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col shrink-0 lg:shrink min-h-[500px] lg:min-h-0 lg:h-full overflow-hidden">
+        {/* Generous min-height ensures chart never feels squashed on small screens */}
+        <div className="lg:col-span-7 bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col shrink-0 lg:shrink min-h-[580px] sm:min-h-[640px] lg:min-h-0 lg:h-full overflow-hidden">
 
           <div className="p-3 border-b border-slate-200 flex items-center justify-between bg-slate-50 z-10 shrink-0">
             <div className="flex items-center gap-2">
@@ -289,8 +407,8 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* FIX 3: Simplified padding & min-h ensures no huge gaps and no crushed charts */}
-          <div className="flex-1 bg-white relative w-full min-h-[300px]">
+          {/* Chart occupies major height/length of the panel */}
+          <div className={`flex-1 min-h-[160px] bg-white relative w-full ${isDragging ? 'pointer-events-none select-none' : ''}`}>
             {selectedStock && chartData && !isChartLoading ? (
               <div className="absolute inset-0 p-4">
                 <ChartComponent data={chartData} />
@@ -305,43 +423,239 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* FIX 4: Responsive Metrics Grid (grid-cols-2 on tiny screens, grid-cols-3 on larger) */}
+          {/* DRAGGABLE RESIZER HANDLE */}
           {selectedStock && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4 border-t border-slate-200 bg-slate-50 shrink-0">
+            <div
+              onMouseDown={handleDragStart}
+              onTouchStart={handleTouchStart}
+              onDoubleClick={() => setFundamentalsHeight(126)}
+              className="h-3.5 -my-1 cursor-row-resize flex items-center justify-center z-20 group relative select-none hover:bg-[#D4AF37]/10 active:bg-[#D4AF37]/25 transition-colors"
+              title="Drag up or down to adjust chart & fundamentals height (Double-click to reset)"
+            >
+              <div className="w-full border-t border-slate-200 group-hover:border-[#D4AF37]/70 group-active:border-[#D4AF37] transition-colors relative flex items-center justify-center">
+                <div className="absolute px-2.5 py-0.5 bg-white group-hover:bg-[#D4AF37] group-active:bg-[#D4AF37] border border-slate-300 group-hover:border-[#D4AF37] rounded-full transition-all flex items-center gap-1 shadow-2xs">
+                  <GripHorizontal size={13} className="text-slate-400 group-hover:text-white transition-colors" />
+                </div>
+              </div>
+            </div>
+          )}
 
-              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
-                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">
-                  Market Cap (Cr)
-                </span>
-                <span className="text-sm font-bold text-slate-800 truncate">
-                  {selectedStock['Market Capitalization']
-                    ? `₹${Number(selectedStock['Market Capitalization']).toLocaleString('en-IN')}`
-                    : 'N/A'}
-                </span>
+          {/* COMPANY FUNDAMENTALS SECTION - User-Adjustable Drag Height */}
+          {selectedStock && (
+            <div
+              style={{ height: `${fundamentalsHeight}px` }}
+              className={`p-2 sm:p-2.5 bg-gradient-to-b from-slate-50/95 to-slate-100/60 shrink-0 flex flex-col gap-1.5 overflow-y-auto [scrollbar-width:thin] [scrollbar-color:#cbd5e1_transparent] ${
+                isDragging ? '' : 'transition-[height] duration-75'
+              }`}
+            >
+              {/* Header */}
+              <div className="sticky top-0 bg-slate-50/95 backdrop-blur-xs flex items-center justify-between z-10 pb-0.5">
+                <div className="flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-[#D4AF37] ring-4 ring-[#D4AF37]/20" />
+                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-1.5">
+                    <Building2 size={13} className="text-[#D4AF37]" />
+                    Company Fundamentals
+                  </span>
+                  <span className="text-[10px] text-slate-400 font-medium hidden sm:inline">
+                    {fundamentalsHeight >= 190
+                      ? "• All metrics shown (drag to adjust)"
+                      : fundamentalsHeight <= 60
+                      ? "• Collapsed (drag up to expand)"
+                      : "• Drag bar or scroll for more"}
+                  </span>
+                </div>
+                {selectedStock['Industry Name'] && (
+                  <span className="text-[11px] font-semibold text-slate-600 bg-white border border-slate-200/90 shadow-2xs px-2 py-0.5 rounded-full truncate max-w-[200px]">
+                    {selectedStock['Industry Name']}
+                  </span>
+                )}
               </div>
 
-              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center">
-                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">
-                  P/E (TTM)
-                </span>
-                <span className="text-sm font-bold text-slate-800">
-                  {selectedStock['PE TTM Price to Earnings']
-                    ? Number(selectedStock['PE TTM Price to Earnings']).toFixed(2)
-                    : 'N/A'}
-                </span>
-              </div>
+              {/* 6 Fundamentals Cards Grid - 2 rows x 3 columns */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
 
-              <div className="bg-white p-3 rounded-lg border border-slate-200 shadow-sm flex flex-col justify-center col-span-2 sm:col-span-1">
-                <span className="text-[10px] uppercase tracking-wider font-bold text-slate-400 mb-1">
-                  ROE (Annual)
-                </span>
-                <span className={`text-sm font-bold ${selectedStock['ROE Annual %'] > 15 ? 'text-emerald-600' : 'text-slate-800'}`}>
-                  {selectedStock['ROE Annual %']
-                    ? `${Number(selectedStock['ROE Annual %']).toFixed(2)}%`
-                    : 'N/A'}
-                </span>
-              </div>
+                {/* 1. Market Cap */}
+                <div className="bg-white rounded-lg border border-slate-200/80 p-2 shadow-2xs hover:border-[#D4AF37]/60 hover:shadow-xs transition-all duration-150 flex flex-col justify-between h-[68px]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="p-0.5 rounded bg-amber-50 text-amber-600 border border-amber-200/50">
+                        <Coins size={11} />
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500">
+                        Market Cap
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-bold font-mono text-slate-400 bg-slate-100 px-1 py-0.2 rounded">
+                      Cr
+                    </span>
+                  </div>
+                  <div className="text-base font-extrabold text-slate-800 tracking-tight leading-tight my-0.5 truncate">
+                    {formatValue(selectedStock['Market Capitalization'], 'currency')}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-medium truncate flex items-center justify-between">
+                    <span>Valuation Size</span>
+                  </div>
+                </div>
 
+                {/* 2. P/E (TTM) */}
+                <div className="bg-white rounded-lg border border-slate-200/80 p-2 shadow-2xs hover:border-[#D4AF37]/60 hover:shadow-xs transition-all duration-150 flex flex-col justify-between h-[68px]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="p-0.5 rounded bg-indigo-50 text-indigo-600 border border-indigo-200/50">
+                        <Gauge size={11} />
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500">
+                        P/E Ratio
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-bold font-mono text-slate-400 bg-slate-100 px-1 py-0.2 rounded">
+                      TTM
+                    </span>
+                  </div>
+                  <div className={`text-base font-extrabold tracking-tight leading-tight my-0.5 truncate ${Number(selectedStock['PE TTM Price to Earnings']) < 0 ? 'text-rose-600' : 'text-slate-800'
+                    }`}>
+                    {formatValue(selectedStock['PE TTM Price to Earnings'], 'pe')}
+                  </div>
+                  <div className="text-[10px] text-slate-400 font-medium truncate flex items-center justify-between">
+                    <span>{Number(selectedStock['PE TTM Price to Earnings']) < 0 ? 'Negative (Loss)' : 'Multiple'}</span>
+                  </div>
+                </div>
+
+                {/* 3. ROE (Annual) */}
+                <div className="bg-white rounded-lg border border-slate-200/80 p-2 shadow-2xs hover:border-[#D4AF37]/60 hover:shadow-xs transition-all duration-150 flex flex-col justify-between h-[68px]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="p-0.5 rounded bg-emerald-50 text-emerald-600 border border-emerald-200/50">
+                        <TrendingUp size={11} />
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500">
+                        ROE
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-bold font-mono text-slate-400 bg-slate-100 px-1 py-0.2 rounded">
+                      Annual
+                    </span>
+                  </div>
+                  <div className={`text-base font-extrabold tracking-tight leading-tight my-0.5 truncate ${Number(selectedStock['ROE Annual %']) > 15
+                      ? 'text-emerald-600'
+                      : Number(selectedStock['ROE Annual %']) > 0
+                        ? 'text-emerald-700'
+                        : Number(selectedStock['ROE Annual %']) < 0
+                          ? 'text-rose-600'
+                          : 'text-slate-800'
+                    }`}>
+                    {formatValue(selectedStock['ROE Annual %'], 'percent')}
+                  </div>
+                  <div className="text-[10px] font-medium truncate flex items-center justify-between">
+                    <span className={Number(selectedStock['ROE Annual %']) > 15 ? 'text-emerald-600 font-semibold' : 'text-slate-400'}>
+                      {Number(selectedStock['ROE Annual %']) > 15 ? 'High Return (>15%)' : 'Return on Equity'}
+                    </span>
+                  </div>
+                </div>
+
+                {/* 4. Total Debt to Total Equity Annual */}
+                <div className="bg-white rounded-lg border border-slate-200/80 p-2 shadow-2xs hover:border-[#D4AF37]/60 hover:shadow-xs transition-all duration-150 flex flex-col justify-between h-[68px]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="p-0.5 rounded bg-blue-50 text-blue-600 border border-blue-200/50">
+                        <Scale size={11} />
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500">
+                        Debt / Equity
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-bold font-mono text-slate-400 bg-slate-100 px-1 py-0.2 rounded">
+                      Annual
+                    </span>
+                  </div>
+                  <div className={`text-base font-extrabold tracking-tight leading-tight my-0.5 truncate ${Number(selectedStock['Total Debt to Total Equity Annual']) <= 0.5
+                      ? 'text-emerald-600'
+                      : Number(selectedStock['Total Debt to Total Equity Annual']) <= 1.2
+                        ? 'text-slate-800'
+                        : 'text-amber-600'
+                    }`}>
+                    {formatValue(selectedStock['Total Debt to Total Equity Annual'], 'ratio')}
+                  </div>
+                  <div className="text-[10px] font-medium truncate flex items-center justify-between">
+                    {(() => {
+                      const de = Number(selectedStock['Total Debt to Total Equity Annual']);
+                      if (isNaN(de) || selectedStock['Total Debt to Total Equity Annual'] == null) return <span className="text-slate-400">Leverage</span>;
+                      if (de === 0) return <span className="text-emerald-600 font-semibold">Zero Debt</span>;
+                      if (de <= 0.5) return <span className="text-emerald-600 font-semibold">Low Leverage</span>;
+                      if (de <= 1.2) return <span className="text-slate-500">Moderate</span>;
+                      return <span className="text-amber-600 font-semibold">High Leverage</span>;
+                    })()}
+                  </div>
+                </div>
+
+                {/* 5. Net Profit Margin Annual % */}
+                <div className="bg-white rounded-lg border border-slate-200/80 p-2 shadow-2xs hover:border-[#D4AF37]/60 hover:shadow-xs transition-all duration-150 flex flex-col justify-between h-[68px]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="p-0.5 rounded bg-teal-50 text-teal-600 border border-teal-200/50">
+                        <Percent size={11} />
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500">
+                        Net Margin
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-bold font-mono text-slate-400 bg-slate-100 px-1 py-0.2 rounded">
+                      Annual
+                    </span>
+                  </div>
+                  <div className={`text-base font-extrabold tracking-tight leading-tight my-0.5 truncate ${Number(selectedStock['Net Profit Margin Annual %']) > 10
+                      ? 'text-emerald-600'
+                      : Number(selectedStock['Net Profit Margin Annual %']) > 0
+                        ? 'text-teal-700'
+                        : Number(selectedStock['Net Profit Margin Annual %']) < 0
+                          ? 'text-rose-600'
+                          : 'text-slate-800'
+                    }`}>
+                    {formatValue(selectedStock['Net Profit Margin Annual %'], 'percent')}
+                  </div>
+                  <div className="text-[10px] font-medium truncate flex items-center justify-between">
+                    {(() => {
+                      const npm = Number(selectedStock['Net Profit Margin Annual %']);
+                      if (isNaN(npm) || selectedStock['Net Profit Margin Annual %'] == null) return <span className="text-slate-400">Profitability</span>;
+                      if (npm > 15) return <span className="text-emerald-600 font-semibold">High Margin</span>;
+                      if (npm > 0) return <span className="text-teal-600 font-semibold">Profitable</span>;
+                      return <span className="text-rose-600 font-semibold">Net Loss</span>;
+                    })()}
+                  </div>
+                </div>
+
+                {/* 6. Asset Turnover Annual % */}
+                <div className="bg-white rounded-lg border border-slate-200/80 p-2 shadow-2xs hover:border-[#D4AF37]/60 hover:shadow-xs transition-all duration-150 flex flex-col justify-between h-[68px]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <div className="p-0.5 rounded bg-purple-50 text-purple-600 border border-purple-200/50">
+                        <Zap size={11} />
+                      </div>
+                      <span className="text-[10px] uppercase tracking-wider font-bold text-slate-500">
+                        Asset Turnover
+                      </span>
+                    </div>
+                    <span className="text-[9px] font-bold font-mono text-slate-400 bg-slate-100 px-1 py-0.2 rounded">
+                      Annual
+                    </span>
+                  </div>
+                  <div className={`text-base font-extrabold tracking-tight leading-tight my-0.5 truncate ${Number(selectedStock['Asset Turnover Annual %']) >= 1.0
+                      ? 'text-purple-700'
+                      : 'text-slate-800'
+                    }`}>
+                    {formatValue(selectedStock['Asset Turnover Annual %'], 'turnover')}
+                  </div>
+                  <div className="text-[10px] font-medium truncate flex items-center justify-between">
+                    {(() => {
+                      const at = Number(selectedStock['Asset Turnover Annual %']);
+                      if (isNaN(at) || selectedStock['Asset Turnover Annual %'] == null) return <span className="text-slate-400">Efficiency</span>;
+                      if (at >= 1.0) return <span className="text-purple-600 font-semibold">High Efficiency</span>;
+                      return <span className="text-slate-500">Asset Heavy</span>;
+                    })()}
+                  </div>
+                </div>
+
+              </div>
             </div>
           )}
 
